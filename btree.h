@@ -14,4 +14,5 @@ typedef struct _BTree BTree;
 BTree * bt_new(BT_OpenFlag flag);
 void bt_print(BTree *bt);
 void bt_insert(BTree *bt, uint64_t key, uint64_t value);
+void bt_flush(BTree *bt);
 #endif // __BT_H__
