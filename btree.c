@@ -103,7 +103,7 @@ typedef struct {
     // block size = sizeof(key and pointers) + sizeof(BTreeNodeBlk)
 } BTreeNodeBlk;
 
-struct BTreeNode{
+struct BTreeNode {
     BTree                 *tree;
     BTreeNodeBlk          *blk;     
     uint64_t               blkid;
@@ -134,7 +134,8 @@ struct _BTree {
     BTreeNode    **blkid_to_node;
 };
 
-
+static BTreeValues *bt_values_new();
+static void bt_values_put_value(BTreeValues *values, uint64_t value);
 
 static uint64_t bt_next_blkid(BTree *bt);
 static uint64_t bt_get_order(BTree *bt);
@@ -145,13 +146,20 @@ static void bt_load_blk(BTree *bt, void *dst, uint64_t index);
 static void bt_set_node(BTree *bt, uint64_t blkid, BTreeNode *node);
 static BTreeNode *bt_get_node(BTree *bt, uint64_t blkid);
 
+
+
+
 /////////////////////////////////////////////////
 //  BTreeMetas
 /////////////////////////////////////////////////
 
 static BTreeMetaBlk *bt_meta_blk_new_empty(uint64_t order, uint64_t blksize)
 {
-    BTreeMetaBlk * blk = (BTreeMetaBlk *)malloc(blksize);
+    BTreeMetaBlk * blk;
+    
+    blk = (BTreeMetaBlk *)malloc(blksize);
+    // prevent valgrind complain Syscall param write(buf) points to uninitialised byte(s)
+    memset(blk, 0, blksize);    
     blk->magic = FILE_MAGIC;
     blk->order = order;
     blk->blk_size = blksize;
@@ -170,7 +178,14 @@ static BTreeMetaBlk *bt_meta_blk_new_from_file(BTree *bt)
     assert(blk->magic == FILE_MAGIC);   // bad tree file
     blk = (BTreeMetaBlk *)realloc(blk, blk->blk_size);
 
+    memset((char *)blk + sizeof(BTreeMetaBlk), 0, blk->blk_size - sizeof(BTreeMetaBlk));
+
     return blk;
+}
+
+static void bt_meta_blk_destory(BTreeMetaBlk *blk)
+{
+    free(blk);
 }
 
 static BTreeMeta *bt_meta_new_empty(uint64_t order, uint64_t blksize)
@@ -184,6 +199,12 @@ static BTreeMeta *bt_meta_new_empty(uint64_t order, uint64_t blksize)
     meta->blk = blk;
 
     return meta;
+}
+
+static void bt_meta_destory(BTreeMeta *meta)
+{
+    bt_meta_blk_destory(meta->blk);
+    free(meta);
 }
 
 static BTreeMeta *bt_meta_new_from_file(BTree *bt)
@@ -354,29 +375,40 @@ static void bt_node_blk_link_parent_child(BTreeNodeBlk *parent, BTreeNodeBlk *ch
     child->parent_blkid = parent_blkid;
 }
 
-// insert a key,value pair into a LEAF node blk
-// The allocated blk in memory can hold one more (key/value)!
-void bt_node_blk_leaf_insert(BTreeNodeBlk *blk, uint64_t key, uint64_t value)
+
+static uint64_t bt_node_blk_leaf_search(BTreeNodeBlk *blk, uint64_t key)
 {
     uint64_t pos;
-    char *src;
-    char *dest;
-    uint64_t n;
+
+    pos = 0;
+                                                            // not <= here. we want index of *key* tha equal to key
+    while (pos < blk->key_counts && bt_node_blk_get_key(blk, pos) < key)
+        pos ++;
+
+    return pos;
+}
+
+// insert a key,value pair into a LEAF node blk
+// The allocated blk in memory can hold one more (key/value)!
+// after this function return, the blk can hold one more key than max_keys
+static void bt_node_blk_leaf_insert(BTreeNodeBlk *blk, uint64_t key, uint64_t value)
+{
+    uint64_t  pos;
+    char     *src;
+    char     *dest;
+    uint64_t  n;
 
     assert(blk->type & BT_NODE_TYPE_LEAF);
 
-    pos = 0;
-    
-    while (pos < blk->key_counts && bt_node_blk_get_key(blk, pos) <= key)
-        pos ++;
+    pos = bt_node_blk_leaf_search(blk, key);
     
     src = (char *)blk + sizeof(BTreeNodeBlk) + pos * sizeof(uint64_t) * 2;
     dest = src + 2 *sizeof(uint64_t);
     n = (blk->key_counts - pos) * 2 * sizeof(uint64_t);
     memmove(dest, src, n);
 
-    *(uint64_t *)src = key;
-    *((uint64_t *)(src) + 1) = value;
+    *(uint64_t *)src = value;
+    *((uint64_t *)(src) + 1) = key;
 
     blk->key_counts += 1;
 }
@@ -397,7 +429,12 @@ void bt_node_blk_none_leaf_make_space(BTreeNodeBlk *blk, uint64_t index)
 
 static BTreeNodeBlk *bt_node_blk_new_empty(uint64_t blk_size, uint64_t type)
 {
-    BTreeNodeBlk *blk =  (BTreeNodeBlk *)malloc(blk_size + sizeof(uint64_t) * 2); 
+    BTreeNodeBlk *blk;
+    uint64_t      mem_size;
+    mem_size = blk_size + sizeof(uint64_t) * 2;
+    blk =  (BTreeNodeBlk *)malloc(mem_size);
+    // prevent valgrind complain Syscall param write(buf) points to uninitialised byte(s)
+    memset(blk, 0, blk_size);
     blk->type = type;
     blk->parent_blkid = 0;
     blk->left_sibling_blkid = 0;
@@ -408,9 +445,18 @@ static BTreeNodeBlk *bt_node_blk_new_empty(uint64_t blk_size, uint64_t type)
 static BTreeNodeBlk *bt_node_blk_new_from_file(BTree *bt, uint64_t blkid)
 {
     BTreeNodeBlk *blk;
-    blk =  (BTreeNodeBlk *)malloc(bt_get_blksize(bt) + sizeof(uint64_t) * 2);
+    uint64_t      blksize;
+
+    blksize = bt_get_blksize(bt);
+    blk =  (BTreeNodeBlk *)malloc(blksize + sizeof(uint64_t) * 2);
+    memset(blk, 0, blksize);
     bt_load_blk(bt, blk, blkid);
     return blk;
+}
+
+static void bt_node_blk_destory(BTreeNodeBlk *blk)
+{
+    free(blk);
 }
 
 
@@ -585,7 +631,6 @@ static void bt_node_move_half_content(BTreeNode* new, BTreeNode *node, uint64_t 
     bt_node_marked_dirty(node);
     bt_node_marked_dirty(new);
 }
-
 
 static void bt_node_set_key_and_link(BTreeNode *parent, uint64_t index, uint64_t key, BTreeNode *left, BTreeNode *right)
 {
@@ -806,11 +851,105 @@ static BTreeNode *bt_node_search(BTreeNode *node, uint64_t key)
     return bt_node_search(bt_node_get_child(node, i), key);
 }
 
+// return 1 iff the caller need to check next sibling elss 0
+// thai is          #keys_put_in_to_value < limit && 
+//                  last key in this node has key = key
+int bt_node_leaf_fetch_values(BTreeNode *leaf, BTreeValues *values, uint64_t limit, uint64_t key)
+{
+    uint64_t count;
+    uint64_t index;
+    uint64_t keys_in_node;
+    uint64_t k, v;
+
+    count = 0;
+    keys_in_node = bt_node_blk_get_key_count(leaf->blk);
+
+    // empty tree!
+    if(keys_in_node == 0)
+    {
+        assert(bt_node_get_type(leaf) & BT_NODE_TYPE_ROOT);
+        return 0;
+    }
+
+    index = bt_node_blk_leaf_search(leaf->blk, key);
+
+    for(; index < keys_in_node; index ++)
+    {
+        k = bt_node_blk_get_key(leaf->blk, index);
+        if(k != key)
+            break;
+        v = bt_node_blk_get_value(leaf->blk, index);
+        bt_values_put_value(values, v);
+
+        count ++;
+        if(count == limit)
+            break;
+    }
+
+    if((index == keys_in_node) && (count < limit))
+        return 1;
+    else
+        return 0;
+}
+
+static void bt_node_destory(BTreeNode *node)
+{
+    bt_node_blk_destory(node->blk);
+    free(node);
+}
+
+
+
+
+/////////////////////////////////////////////////
+//  BTreeValues(result for search in tree)
+/////////////////////////////////////////////////
+struct _BTreeValues
+{
+    uint64_t  counts;
+    uint64_t *values;
+};
+
+static BTreeValues *bt_values_new()
+{
+    BTreeValues *values;
+    values = (BTreeValues *)malloc(sizeof(BTreeValues));
+
+    values->counts = 0;
+    values->values = NULL;
+}
+
+void bt_values_destory(BTreeValues *values)
+{
+    free(values->values);
+    free(values);
+}
+
+uint64_t bt_values_get_count(BTreeValues *values)
+{
+    return values->counts;
+}
+
+static void bt_values_put_value(BTreeValues *values, uint64_t value)
+{
+    values->counts ++;
+    // TODO : efficent allocate
+    values->values = realloc(values->values, values->counts * sizeof(uint64_t));
+    values->values[values->counts - 1] = value;
+}
+
+uint64_t bt_values_get_value(BTreeValues *values, uint64_t index)
+{
+    assert(index < values->counts);
+    return values->values[index];
+}
+
+
+
+
 /////////////////////////////////////////////////
 //  BTree
 /////////////////////////////////////////////////
-
-
 
 static uint64_t bt_get_max_keys(BTree *bt)
 {
@@ -857,19 +996,8 @@ static void bt_set_node(BTree *bt, uint64_t blkid, BTreeNode *node)
 
 
     // TODO....  only realloc if really needed
-
-    BTreeNode **temp;
-    uint64_t size;
-    size = sizeof(BTreeNode *) * (max_blkid + 1);
-    //printf("%d | %d\n", max_blkid, size);
-    //printf("blkid_to_node: %x\n", bt->blkid_to_node);
-/*
-    temp = (BTreeNode **)malloc(size);
-    memcpy(temp, bt->blkid_to_node, sizeof(BTreeNode *) * (max_blkid ));
-    free(bt->blkid_to_node);
-    bt->blkid_to_node = temp;
-*/
-    bt->blkid_to_node = (BTreeNode **)realloc(bt->blkid_to_node, size);
+    if(blkid == max_blkid)
+        bt->blkid_to_node = (BTreeNode **)realloc(bt->blkid_to_node, sizeof(BTreeNode *) * (max_blkid + 1));
     bt->blkid_to_node[blkid] = node;
 }
 
@@ -912,6 +1040,7 @@ static void bt_load_blk(BTree *bt, void *dst, uint64_t blkid)
     assert(rtv == blkid * blksize);
     rtv = read(bt->file_fd, dst, blksize);
     assert(rtv == blksize);
+
 }
 
 static void bt_store_blk(BTree *bt, uint64_t blkid)
@@ -971,23 +1100,11 @@ static BTree *bt_new_from_file(const char *file)
     bt->min_keys = order / 2;
     // node blk id start from 1
     bt->blkid_to_node = (BTreeNode **)malloc(sizeof(BTreeNode *) * (bt_get_max_blkid(bt) + 1));
-    memset(bt->blkid_to_node, 0, bt_get_max_blkid(bt) + 1);
+    memset(bt->blkid_to_node, 0, sizeof(BTreeNode *)*(bt_get_max_blkid(bt) + 1));
 
     bt_load_root(bt);
 
     return bt;
-}
-
-void bt_flush(BTree *bt)
-{
-    BTreeNode *node;
-
-    if(bt->meta->dirty)
-        bt_store_blk(bt, 0);
-
-    list_for_each_entry(node, &bt->new_node_chain, chain)
-        bt_store_blk(bt, bt_node_get_blkid(node));
-
 }
 
 static BTree *bt_new_empty(const char *file, uint64_t order)
@@ -1020,22 +1137,62 @@ static BTree *bt_new_empty(const char *file, uint64_t order)
     return bt;
 }
 
+void bt_flush(BTree *bt)
+{
+    BTreeNode *node;
+
+    if(bt->meta->dirty)
+        bt_store_blk(bt, 0);
+
+    list_for_each_entry(node, &bt->new_node_chain, chain)
+        bt_store_blk(bt, bt_node_get_blkid(node));
+
+    list_for_each_entry(node, &bt->dirty_node_chain, chain)
+        bt_store_blk(bt, bt_node_get_blkid(node));
+
+}
+
 void bt_insert(BTree *bt, uint64_t key, uint64_t value)
 {
     BTreeNode  *leaf;
 
-    // Perform a search to determine what bucket the new record should go into.
     leaf = bt_node_search(bt->root, key);
     bt_node_leaf_insert(leaf, key, value);   
     
     assert(bt_node_get_key_count(leaf) <= bt->max_keys);
 }
 
-BTree * bt_new(BT_OpenFlag flag)
+BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key)
+{
+    BTreeNode   *leaf;
+    BTreeValues *values;
+    int          remind;
+    int          b_continue;
+
+    values = bt_values_new();
+    leaf = bt_node_search(bt->root, key);
+
+    do
+    {
+        remind = limit - bt_values_get_count(values);
+        b_continue = bt_node_leaf_fetch_values(leaf, values, remind, key);
+
+        leaf = bt_node_get_right_sibling(leaf);
+        if(leaf == NULL)
+            break;
+
+    } while (b_continue);
+
+    return values;
+}
+
+BTree * bt_open(BTreeOpenFlag flag)
 {
     assert(flag.file);
     if(access(flag.file, F_OK) != -1)
     {
+        if(flag.error_if_exist)
+            return NULL;
         return bt_new_from_file(flag.file);
     }
     else
@@ -1049,13 +1206,34 @@ BTree * bt_new(BT_OpenFlag flag)
     }
 }
 
+void bt_close(BTree *bt)
+{
+    uint64_t i;
+
+    // flush tree to disk
+    bt_flush(bt);
+
+    // destory loaded node
+    for(i = 1; i <= bt_get_max_blkid(bt); i++)
+    {
+        if(bt->blkid_to_node[i])
+            bt_node_destory(bt->blkid_to_node[i]);
+    }
+    // destory meta     
+    bt_meta_destory(bt->meta);
+
+
+    free(bt->blkid_to_node);
+    free(bt);
+}
+
+
 
 
 
 /////////////////////////////////////////////////
 //  print tree
 /////////////////////////////////////////////////
-
 
 void bt_node_print(BTreeNode* node)
 {
