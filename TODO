@@ -1,0 +1,6 @@
+TODO
+1. segfault when compiling with -O1
+2. node state new and be considered as dirty
+3. implement bt_delete & reuse blkid
+4. efficient realloc
+5. consistency
