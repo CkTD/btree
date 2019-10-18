@@ -11,7 +11,7 @@ int main()
     flag.create_if_missing = 1;
     flag.error_if_exist = 0;
     flag.file = "./test.bt";
-    flag.order = 5;
+    flag.order = 101;
 
     bt = bt_open(flag);
     //bt_print(bt);
@@ -26,10 +26,10 @@ int main()
     
     BTreeValues *values = bt_search(bt, 100, n);
 
-    printf("Search res[%d]\n", bt_values_get_count(values));
+    printf("Search res[%ld]\n", bt_values_get_count(values));
     for(k=0;k<bt_values_get_count(values); k++)
     {
-        printf("%d ", bt_values_get_value(values, k));
+        printf("%ld ", bt_values_get_value(values, k));
     }
     printf("\n");
 

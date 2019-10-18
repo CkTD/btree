@@ -290,10 +290,15 @@ static uint64_t bt_node_blk_get_parent_blkid(BTreeNodeBlk *blk)
     return blk->parent_blkid;
 }
 
+// not used for now
+/*
+
 static uint64_t bt_node_blk_get_left_sibling_blkid(BTreeNodeBlk *blk)
 {
     return blk->left_sibling_blkid;
 }
+
+*/
 
 static uint64_t bt_node_blk_get_right_sibling_blkid(BTreeNodeBlk *blk)
 {
@@ -324,6 +329,10 @@ static uint64_t bt_node_blk_get_value(BTreeNodeBlk *blk, uint64_t index)
 
 }
 
+//not used for now
+
+/*
+
 static void bt_node_blk_set_value(BTreeNodeBlk *blk, uint64_t index, uint64_t value)
 {
     assert(blk->type & BT_NODE_TYPE_LEAF);
@@ -332,6 +341,8 @@ static void bt_node_blk_set_value(BTreeNodeBlk *blk, uint64_t index, uint64_t va
         ((char *)blk + sizeof(BTreeNodeBlk) + sizeof(uint64_t) * (index * 2)) = value;
 
 }
+
+*/
 
 // index range from [0, key_counts]
 static uint64_t bt_node_blk_get_child_blkid(BTreeNodeBlk *blk, uint64_t index)
@@ -440,6 +451,8 @@ static BTreeNodeBlk *bt_node_blk_new_empty(uint64_t blk_size, uint64_t type)
     blk->left_sibling_blkid = 0;
     blk->right_sibling_blkid = 0;
     blk->key_counts = 0;
+
+    return blk;
 }
 
 static BTreeNodeBlk *bt_node_blk_new_from_file(BTree *bt, uint64_t blkid)
@@ -518,12 +531,16 @@ static uint64_t bt_node_get_value(BTreeNode *node, uint64_t index)
     return bt_node_blk_get_value(node->blk, index);
 }
 
-static uint64_t bt_node_set_value(BTreeNode *node, uint64_t index, uint64_t value)
+// not used for now
+/*
+
+static void bt_node_set_value(BTreeNode *node, uint64_t index, uint64_t value)
 {
     bt_node_blk_set_value(node->blk, index, value);
-
     bt_node_marked_dirty(node);
 }
+
+*/
 
 static uint64_t bt_node_get_key_count(BTreeNode *node)
 {
@@ -536,6 +553,9 @@ static void bt_node_set_key_count(BTreeNode *node, uint64_t count)
     bt_node_marked_dirty(node);
 }
 
+// not used for now
+/*
+
 static BTreeNode *bt_node_get_left_sibling(BTreeNode *node)
 {
     uint64_t blkid;
@@ -546,6 +566,8 @@ static BTreeNode *bt_node_get_left_sibling(BTreeNode *node)
 
     return bt_get_node(node->tree, blkid);
 }
+
+*/
 
 static BTreeNode *bt_node_get_right_sibling(BTreeNode *node)
 {
@@ -707,13 +729,11 @@ static BTreeNode *bt_node_cut(BTreeNode *node, uint64_t *split_key)
     BTree        *tree;
     uint64_t      type;
     BTreeNode    *new;
-    BTreeNodeBlk *blk;
-    uint64_t      min_keys, max_keys, blk_size;
+    uint64_t      min_keys, max_keys;
 
     tree = node->tree;
     min_keys = bt_get_min_keys(tree);
     max_keys = bt_get_max_keys(tree);
-    blk_size = bt_get_blksize(tree);
 
     assert(bt_node_get_key_count(node) == max_keys + 1);
 
@@ -768,13 +788,6 @@ static void bt_node_none_leaf_split(BTree *bt, BTreeNode *node)
 
 static void bt_node_none_leaf_make_space(BTreeNode *node, uint64_t index)
 {
-    uint64_t last;
-    uint64_t n;
-    uint64_t i;
-
-    last = bt_node_get_key_count(node);
-    n = last - index + 1;
-
     bt_node_blk_none_leaf_make_space(node->blk, index);
 }
 
@@ -917,6 +930,8 @@ static BTreeValues *bt_values_new()
 
     values->counts = 0;
     values->values = NULL;
+
+    return values;
 }
 
 void bt_values_destory(BTreeValues *values)
@@ -1237,8 +1252,8 @@ void bt_close(BTree *bt)
 
 void bt_node_print(BTreeNode* node)
 {
-    int i;
-    printf("---------- Node(id: %d, %x) ----------\n[", node->blkid, node);
+    uint64_t i;
+    printf("---------- Node(id: %ld, %p) ----------\n[", node->blkid, node);
     if(node->blk->type & BT_NODE_TYPE_INTERNAL)
         printf("INTERNAL ");
     if(node->blk->type & BT_NODE_TYPE_LEAF)
@@ -1247,15 +1262,15 @@ void bt_node_print(BTreeNode* node)
         printf("ROOT");
 
 
-    printf("]P: %d, L: %d, R: %d, #K: %d\n|",node->blk->parent_blkid, node->blk->left_sibling_blkid, node->blk->right_sibling_blkid, node->blk->key_counts);
+    printf("]P: %ld, L: %ld, R: %ld, #K: %ld\n|",node->blk->parent_blkid, node->blk->left_sibling_blkid, node->blk->right_sibling_blkid, node->blk->key_counts);
     if(!(node->blk->type & BT_NODE_TYPE_LEAF)) 
     {
         for (i = 0; i < node->blk->key_counts; i++)
         {
-            printf(" I_%d (%d) K_%d (%d) | ", i, bt_node_get_blkid(bt_node_get_child(node, i)), i, bt_node_get_key(node, i));
+            printf(" I_%ld (%ld) K_%ld (%ld) | ", i, bt_node_get_blkid(bt_node_get_child(node, i)), i, bt_node_get_key(node, i));
         }
 
-        printf("I_%d (%d) |\n", node->blk->key_counts, bt_node_get_blkid(bt_node_get_child(node, i)));
+        printf("I_%ld (%ld) |\n", node->blk->key_counts, bt_node_get_blkid(bt_node_get_child(node, i)));
         if(node->blk->key_counts)
         for(i=0;i <= node->blk->key_counts;i++)
         {
@@ -1266,7 +1281,7 @@ void bt_node_print(BTreeNode* node)
     {
         for (i = 0; i < node->blk->key_counts; i++)
         {
-            printf(" V_%d (%d) K_%d (%d) | ", i, bt_node_get_value(node, i), i, bt_node_get_key(node, i));
+            printf(" V_%ld (%ld) K_%ld (%ld) | ", i, bt_node_get_value(node, i), i, bt_node_get_key(node, i));
         }
         printf("\n");
     }
@@ -1275,11 +1290,11 @@ void bt_node_print(BTreeNode* node)
 void bt_print(BTree *bt)
 {
     printf("---------- Meta ----------\n");
-    printf("order:    %d\n", bt_get_order(bt));
-    printf("blksize:  %d\n", bt->meta->blk->blk_size);
-    printf("blkcount: %d\n", bt->meta->blk->blk_counts);
-    printf("maxblkid: %d\n", bt->meta->blk->max_blkid);
-    printf("rootblk:  %d\n", bt->meta->blk->root_blkid);
+    printf("order:    %ld\n", bt_get_order(bt));
+    printf("blksize:  %ld\n", bt->meta->blk->blk_size);
+    printf("blkcount: %ld\n", bt->meta->blk->blk_counts);
+    printf("maxblkid: %ld\n", bt->meta->blk->max_blkid);
+    printf("rootblk:  %ld\n", bt->meta->blk->root_blkid);
     bt_node_print(bt->root);
 
     BTreeNode *node;
@@ -1287,14 +1302,14 @@ void bt_print(BTree *bt)
     printf("new blks: ");
     list_for_each_entry(node, &bt->new_node_chain, chain)
     {
-        printf("%d ",node->blkid);
+        printf("%ld ",node->blkid);
     }
     printf("\n");
 
     printf("dirty blks: ");
     list_for_each_entry(node, &bt->dirty_node_chain, chain)
     {
-        printf("%d ",node->blkid);
+        printf("%ld ",node->blkid);
     }
     printf("\n");
 }
