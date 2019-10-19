@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 
-# define FILE_MAGIC 0xbbbbbbbb
+# define BTREE_FILE_MAGIC 0xbbbbbbbb
 /*
 
 Files Structure:
@@ -160,7 +160,7 @@ static BTreeMetaBlk *bt_meta_blk_new_empty(uint64_t order, uint64_t blksize)
     blk = (BTreeMetaBlk *)malloc(blksize);
     // prevent valgrind complain Syscall param write(buf) points to uninitialised byte(s)
     memset(blk, 0, blksize);    
-    blk->magic = FILE_MAGIC;
+    blk->magic = BTREE_FILE_MAGIC;
     blk->order = order;
     blk->blk_size = blksize;
     blk->blk_counts = 1;
@@ -175,7 +175,7 @@ static BTreeMetaBlk *bt_meta_blk_new_from_file(BTree *bt)
 
     blk = (BTreeMetaBlk *)malloc(sizeof(BTreeMetaBlk));
     bt_load_blk(bt, blk, 0);    // metablk has blkid 0
-    assert(blk->magic == FILE_MAGIC);   // bad tree file
+    assert(blk->magic == BTREE_FILE_MAGIC);   // bad tree file
     blk = (BTreeMetaBlk *)realloc(blk, blk->blk_size);
 
     memset((char *)blk + sizeof(BTreeMetaBlk), 0, blk->blk_size - sizeof(BTreeMetaBlk));
@@ -1253,7 +1253,7 @@ void bt_close(BTree *bt)
 void bt_node_print(BTreeNode* node)
 {
     uint64_t i;
-    printf("---------- Node(id: %ld, %p) ----------\n[", node->blkid, node);
+    printf("---------- Node(id: %lu, %p) ----------\n[", node->blkid, node);
     if(node->blk->type & BT_NODE_TYPE_INTERNAL)
         printf("INTERNAL ");
     if(node->blk->type & BT_NODE_TYPE_LEAF)
@@ -1262,15 +1262,15 @@ void bt_node_print(BTreeNode* node)
         printf("ROOT");
 
 
-    printf("]P: %ld, L: %ld, R: %ld, #K: %ld\n|",node->blk->parent_blkid, node->blk->left_sibling_blkid, node->blk->right_sibling_blkid, node->blk->key_counts);
+    printf("]P: %lu, L: %lu, R: %lu, #K: %lu\n|",node->blk->parent_blkid, node->blk->left_sibling_blkid, node->blk->right_sibling_blkid, node->blk->key_counts);
     if(!(node->blk->type & BT_NODE_TYPE_LEAF)) 
     {
         for (i = 0; i < node->blk->key_counts; i++)
         {
-            printf(" I_%ld (%ld) K_%ld (%ld) | ", i, bt_node_get_blkid(bt_node_get_child(node, i)), i, bt_node_get_key(node, i));
+            printf(" I_%lu (%lu) K_%lu (%lu) | ", i, bt_node_get_blkid(bt_node_get_child(node, i)), i, bt_node_get_key(node, i));
         }
 
-        printf("I_%ld (%ld) |\n", node->blk->key_counts, bt_node_get_blkid(bt_node_get_child(node, i)));
+        printf("I_%lu (%lu) |\n", node->blk->key_counts, bt_node_get_blkid(bt_node_get_child(node, i)));
         if(node->blk->key_counts)
         for(i=0;i <= node->blk->key_counts;i++)
         {
@@ -1281,7 +1281,7 @@ void bt_node_print(BTreeNode* node)
     {
         for (i = 0; i < node->blk->key_counts; i++)
         {
-            printf(" V_%ld (%ld) K_%ld (%ld) | ", i, bt_node_get_value(node, i), i, bt_node_get_key(node, i));
+            printf(" V_%lu (%lu) K_%lu (%lu) | ", i, bt_node_get_value(node, i), i, bt_node_get_key(node, i));
         }
         printf("\n");
     }
@@ -1290,11 +1290,11 @@ void bt_node_print(BTreeNode* node)
 void bt_print(BTree *bt)
 {
     printf("---------- Meta ----------\n");
-    printf("order:    %ld\n", bt_get_order(bt));
-    printf("blksize:  %ld\n", bt->meta->blk->blk_size);
-    printf("blkcount: %ld\n", bt->meta->blk->blk_counts);
-    printf("maxblkid: %ld\n", bt->meta->blk->max_blkid);
-    printf("rootblk:  %ld\n", bt->meta->blk->root_blkid);
+    printf("order:    %lu\n", bt_get_order(bt));
+    printf("blksize:  %lu\n", bt->meta->blk->blk_size);
+    printf("blkcount: %lu\n", bt->meta->blk->blk_counts);
+    printf("maxblkid: %lu\n", bt->meta->blk->max_blkid);
+    printf("rootblk:  %lu\n", bt->meta->blk->root_blkid);
     bt_node_print(bt->root);
 
     BTreeNode *node;
@@ -1302,14 +1302,14 @@ void bt_print(BTree *bt)
     printf("new blks: ");
     list_for_each_entry(node, &bt->new_node_chain, chain)
     {
-        printf("%ld ",node->blkid);
+        printf("%lu ",node->blkid);
     }
     printf("\n");
 
     printf("dirty blks: ");
     list_for_each_entry(node, &bt->dirty_node_chain, chain)
     {
-        printf("%ld ",node->blkid);
+        printf("%lu ",node->blkid);
     }
     printf("\n");
 }
