@@ -114,7 +114,7 @@ struct BTreeNode {
 typedef struct BTreeNode BTreeNode;
 
 struct _BTree {
-    const char  *  file_path;
+    char          *file_path;
     int            file_fd;
 
     BTreeNode     *root;
@@ -1107,7 +1107,8 @@ static BTree *bt_new_from_file(const char *file)
     INIT_LIST_HEAD(&bt->deleted_node_chain);
     INIT_LIST_HEAD(&bt->new_node_chain);
     INIT_LIST_HEAD(&bt->dirty_node_chain);
-    bt->file_path = file;
+    bt->file_path = (char *)malloc(strlen(file) + 1);
+    strcpy(bt->file_path, file);
     bt->file_fd = -1;
     bt_load_meta(bt);
     order = bt_get_order(bt);
@@ -1133,8 +1134,8 @@ static BTree *bt_new_empty(const char *file, uint64_t order)
     INIT_LIST_HEAD(&bt->new_node_chain);
     INIT_LIST_HEAD(&bt->dirty_node_chain);
 
-    // !!!copy file name to heap!!!
-    bt->file_path = file;
+    bt->file_path = (char *)malloc(strlen(file) + 1);
+    strcpy(bt->file_path, file);
     bt->file_fd = -1;
     bt->max_keys = order - 1;
     bt->min_keys = order / 2;
@@ -1244,6 +1245,7 @@ void bt_close(BTree *bt)
 
 
     free(bt->blkid_to_node);
+    free(bt->file_path);
     free(bt);
 }
 
