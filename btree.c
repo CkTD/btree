@@ -1,7 +1,27 @@
+/**
+ * Copyright (C) 2019 zn
+ * 
+ * This file is part of btree.
+ * 
+ * btree is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * btree is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with btree.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <assert.h>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -11,10 +31,6 @@
 #include "list.h"
 
 
-#include <stdio.h>
-
-
-# define BTREE_FILE_MAGIC 0xbbbbbbbb
 /*
 
 Files Structure:
@@ -73,11 +89,12 @@ typedef struct {
     // padding to blk_size
 } BTreeMetaBlk;
 
+# define BTREE_FILE_MAGIC 0xbbbbbbbb
+
 typedef struct {
     BTreeMetaBlk *blk;
-    int          dirty;
+    int           dirty;
 } BTreeMeta;
-
 
 #define BT_NODE_TYPE_ROOT      1
 #define BT_NODE_TYPE_INTERNAL  2
@@ -103,15 +120,15 @@ typedef struct {
     // block size = sizeof(key and pointers) + sizeof(BTreeNodeBlk)
 } BTreeNodeBlk;
 
-struct BTreeNode {
+typedef struct {
     BTree                 *tree;
     BTreeNodeBlk          *blk;     
     uint64_t               blkid;
       
     struct list_head       chain;      // new or dirty or deleted?
     struct list_head      *state;      // which chain this node in? (the block status)    
-};
-typedef struct BTreeNode BTreeNode;
+} BTreeNode;
+
 
 struct _BTree {
     char          *file_path;
