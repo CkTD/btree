@@ -29,5 +29,6 @@ uint64_t     bt_values_get_count(BTreeValues *values);
 
 
 BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key);
+BTreeValues *bt_search_range(BTree *bt, uint64_t limit, uint64_t key_min, uint64_t key_max);
 
 #endif // __BT_H__

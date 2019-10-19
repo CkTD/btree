@@ -867,7 +867,7 @@ static BTreeNode *bt_node_search(BTreeNode *node, uint64_t key)
 // return 1 iff the caller need to check next sibling elss 0
 // thai is          #keys_put_in_to_value < limit && 
 //                  last key in this node has key = key
-int bt_node_leaf_fetch_values(BTreeNode *leaf, BTreeValues *values, uint64_t limit, uint64_t key)
+int bt_node_leaf_fetch_values(BTreeNode *leaf, BTreeValues *values, uint64_t limit, uint64_t key_min, uint64_t key_max)
 {
     uint64_t count;
     uint64_t index;
@@ -884,12 +884,12 @@ int bt_node_leaf_fetch_values(BTreeNode *leaf, BTreeValues *values, uint64_t lim
         return 0;
     }
 
-    index = bt_node_blk_leaf_search(leaf->blk, key);
+    index = bt_node_blk_leaf_search(leaf->blk, key_min);
 
     for(; index < keys_in_node; index ++)
     {
         k = bt_node_blk_get_key(leaf->blk, index);
-        if(k != key)
+        if(k > key_max)
             break;
         v = bt_node_blk_get_value(leaf->blk, index);
         bt_values_put_value(values, v);
@@ -1177,7 +1177,7 @@ void bt_insert(BTree *bt, uint64_t key, uint64_t value)
     assert(bt_node_get_key_count(leaf) <= bt->max_keys);
 }
 
-BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key)
+BTreeValues *bt_search_range(BTree *bt, uint64_t limit, uint64_t key_min, uint64_t key_max)
 {
     BTreeNode   *leaf;
     BTreeValues *values;
@@ -1185,12 +1185,12 @@ BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key)
     int          b_continue;
 
     values = bt_values_new();
-    leaf = bt_node_search(bt->root, key);
+    leaf = bt_node_search(bt->root, key_min);
 
     do
     {
         remind = limit - bt_values_get_count(values);
-        b_continue = bt_node_leaf_fetch_values(leaf, values, remind, key);
+        b_continue = bt_node_leaf_fetch_values(leaf, values, remind, key_min, key_max);
 
         leaf = bt_node_get_right_sibling(leaf);
         if(leaf == NULL)
@@ -1199,6 +1199,11 @@ BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key)
     } while (b_continue);
 
     return values;
+}
+
+BTreeValues *bt_search(BTree *bt, uint64_t limit, uint64_t key)
+{
+    return bt_search_range(bt, limit, key, key);
 }
 
 BTree * bt_open(BTreeOpenFlag flag)
