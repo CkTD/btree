@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "btree.h"
 #include "table.h"
@@ -73,9 +74,10 @@ typedef struct TableIndex {
 
 
 struct _Table {
-    char         *dir;
-    TableIndex   *indexs;
-    TableContent *content;
+    char            *dir;
+    TableIndex      *indexs;
+    TableContent    *content;
+    pthread_mutex_t  mutex;
 };
 
 
@@ -470,6 +472,20 @@ static uint64_t table_get_row_counts(Table *table, uint64_t count)
 }
 */
 
+static void table_lock(Table *table)
+{
+    int rtv;
+    rtv = pthread_mutex_lock(&table->mutex);
+    assert(rtv == 0);
+}
+
+static void table_unlock(Table *table)
+{
+    int rtv;
+    rtv = pthread_mutex_unlock(&table->mutex);
+    assert(rtv == 0);
+}
+
 static TableRows *table_search_by_index(Table *table, uint64_t column, uint64_t min_value, uint64_t max_value, uint64_t limit)
 {
     TableRows   *rows;
@@ -517,31 +533,57 @@ static TableRows *table_search_by_exhaustion(Table *table, uint64_t column, uint
 
 TableRows *table_search_range(Table *table, uint64_t column, uint64_t min_value, uint64_t max_value, uint64_t limit)
 {
+    TableRows *rows;
+
+    table_lock(table);
+
     if(table_index_is_exist(table->indexs, column))
-        return table_search_by_index(table, column, min_value, max_value, limit);
+        rows = table_search_by_index(table, column, min_value, max_value, limit);
     else
-        return table_search_by_exhaustion(table, column, min_value, max_value, limit);
+        rows = table_search_by_exhaustion(table, column, min_value, max_value, limit);
+
+    table_unlock(table);
+
+    return rows;
 }
 
 TableRows *table_search(Table *table, uint64_t column, uint64_t value, uint64_t limit)
 {
-    return table_search_range(table, column, value, value, limit);
+    TableRows *rows;
+
+    table_lock(table);
+
+    rows = table_search_range(table, column, value, value, limit);
+
+    table_unlock(table);
+
+    return rows;
 }
 
 void table_append(Table *table, TableRow *row)
 {
     uint64_t rowid;
-
+    
+    table_lock(table);
+    
     rowid = table_content_append_row(table->content, row);
     table_index_update(table->indexs, row, rowid);
+
+    table_unlock(table);
 }
 
 int table_create_index(Table *table, uint64_t column)
 {
     TableRows *rows;
+    int rtv;
+    
+    table_lock(table);
+    
     rows = table_content_get_all_rows(table->content);
-
-    return  table_index_create(table->indexs, column, rows);
+    rtv = table_index_create(table->indexs, column, rows);
+    
+    table_unlock(table);
+    return rtv;
 }
 
 static Table *table_new_empty(const char *dir)
@@ -561,7 +603,12 @@ static Table *table_new_empty(const char *dir)
     table->dir = h_dir;
     table->content = table_content_new_empty(dir);
     table->indexs = table_index_new_empty(dir);
-    
+    rtv = pthread_mutex_init(&table->mutex, NULL);
+    if (rtv != 0)
+    {
+        table_close(table);
+        return NULL;
+    }
     return table;    
 }
 
@@ -569,16 +616,22 @@ static Table *table_new_from_file(const char *dir)
 {
     Table *table;
     char  *h_dir;
+    int rtv;
 
     table = (Table *)malloc(sizeof(Table));
     
     h_dir = (char *)malloc(strlen(dir) + 1);
     strcpy(h_dir, dir);
 
-
     table->dir = h_dir;
     table->content = table_content_new_from_file(dir);
     table->indexs = table_index_new_by_meta(dir, &(table->content->meta));
+    rtv = pthread_mutex_init(&table->mutex, NULL);
+    if (rtv != 0)
+    {
+        table_close(table);
+        return NULL;
+    }
     
     return table;    
 }
@@ -609,6 +662,7 @@ void table_flush(Table *table)
 
 void table_close(Table *table)
 {
+    pthread_mutex_destroy(&table->mutex);
     table_flush(table);
     table_index_destory(table->indexs);
     table_content_destory(table->content);

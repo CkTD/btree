@@ -35,36 +35,36 @@ int main()
     flag.create_if_missing = 1;
     flag.error_if_exist = 0;
     flag.file = "./test.bt";
-    flag.order = 101;
+    flag.order = 501;
 
     bt = bt_open(flag);
     //bt_print(bt);
 
     n = 544;
-    bt_insert(bt, n, n);
 
-
+    printf("插入1000000个随机的 key/value pair...");
     for(k=0;k<1000000;k++)
     {
-        bt_insert(bt, k, k);
+        n = rand() % 1000000;
+        bt_insert(bt, n, n);
+        if(n<10)
+        {
+            printf("\tinsert (%ld, %ld)\n", n, n);
+        }
         //bt_insert(bt, rand(), rand());
         //bt_print(bt);
     }
+    printf("Insert done.\n");
     
-    values = bt_search(bt, 100, n);
-    printf("Search res[%lu]\n", bt_values_get_count(values));
+    printf("搜索 [0, 10] 范围的 key...\n");
+    values = bt_search_range(bt, 100, 0, 10);
+    printf("\tSearch Result[%lu]: ", bt_values_get_count(values));
     for(k=0;k<bt_values_get_count(values); k++)
         printf("%lu ", bt_values_get_value(values, k));
     printf("\n");
     bt_values_destory(values);
 
-    values = bt_search_range(bt, 100, n, n+15);
-    printf("Search res[%lu]\n", bt_values_get_count(values));
-    for(k=0;k<bt_values_get_count(values); k++)
-        printf("%lu ", bt_values_get_value(values, k));
-    printf("\n");
-    bt_values_destory(values);
-
+    printf("Search done.\n");
     bt_close(bt);
     return 0;
 }

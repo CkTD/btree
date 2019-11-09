@@ -15,20 +15,30 @@
 # You should have received a copy of the GNU General Public License
 # along with btree.  If not, see <http://www.gnu.org/licenses/>.
 
-CFLAGS = -g -I.
+CFLAGS = -g -I. -Wall
+LDFLAGS = -lpthread
 
 .PHONY: all clean
 
-all: btree_test table_test
+all: btree_test1 btree_test2 table_test1 table_test2 table_test3
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
   
-btree_test: btree.o btree_test.o
-	$(CC) $(CFLAGS) -o $@ $^
+btree_test1: btree.o btree_test1.o
+	$(CC) $(LDFLAGS) -o $@ $^
 
-table_test: btree.o table.o table_test.o
-	$(CC) $(CFLAGS) -o $@ $^
+btree_test2: btree.o btree_test2.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+table_test1: btree.o table.o table_test1.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+table_test2: btree.o table.o table_test2.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+table_test3: btree.o table.o table_test3.o
+	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:
-	rm -f *.o btree_test table_test
+	rm -f *.o btree_test{1,2} table_test{1,2,3}
